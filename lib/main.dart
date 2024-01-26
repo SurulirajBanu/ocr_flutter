@@ -1,125 +1,303 @@
+import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter_tesseract_ocr/flutter_tesseract_ocr.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Tesseract Demo',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+        primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: MyHomePage(title: 'Tesseract Demo'),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+  MyHomePage({Key? key, required this.title}) : super(key: key);
 
   final String title;
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  _MyHomePageState createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  String _ocrText = '';
+  String _ocrHocr = '';
+  Map<String, String> tessimgs = {
+    "kor":
+        "https://raw.githubusercontent.com/khjde1207/tesseract_ocr/master/example/assets/test1.png",
+    "en": "https://tesseract.projectnaptha.com/img/eng_bw.png",
+    "ch_sim": "https://tesseract.projectnaptha.com/img/chi_sim.png",
+    "ru": "https://tesseract.projectnaptha.com/img/rus.png",
+  };
+  var LangList = ["kor", "eng", "deu", "chi_sim"];
+  var selectList = ["eng", "kor"];
+  String path = "";
+  bool bload = false;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+  bool bDownloadtessFile = false;
+  // "https://img1.daumcdn.net/thumb/R1280x0/?scode=mtistory2&fname=https%3A%2F%2Fblog.kakaocdn.net%2Fdn%2FqCviW%2FbtqGWTUaYLo%2FwD3ZE6r3ARZqi4MkUbcGm0%2Fimg.png";
+  var urlEditController = TextEditingController()
+    ..text = "https://tesseract.projectnaptha.com/img/eng_bw.png";
+
+  Future<void> writeToFile(ByteData data, String path) {
+    final buffer = data.buffer;
+    return new File(path).writeAsBytes(
+        buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
+  }
+
+  void runFilePiker() async {
+    // android && ios only
+    final pickedFile =
+        await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      _ocr(pickedFile.path);
+    }
+  }
+
+  void _ocr(url) async {
+    if (selectList.length <= 0) {
+      print("Please select language");
+      return;
+    }
+    path = url;
+    if (kIsWeb == false &&
+        (url.indexOf("http://") == 0 || url.indexOf("https://") == 0)) {
+      Directory tempDir = await getTemporaryDirectory();
+      HttpClient httpClient = new HttpClient();
+      HttpClientRequest request = await httpClient.getUrl(Uri.parse(url));
+      HttpClientResponse response = await request.close();
+      Uint8List bytes = await consolidateHttpClientResponseBytes(response);
+      String dir = tempDir.path;
+      print('$dir/test.jpg');
+      File file = new File('$dir/test.jpg');
+      await file.writeAsBytes(bytes);
+      url = file.path;
+    }
+    var langs = selectList.join("+");
+
+    bload = true;
+    setState(() {});
+
+    _ocrText =
+        await FlutterTesseractOcr.extractText(url, language: langs, args: {
+      "preserve_interword_spaces": "1",
     });
+    //  ========== Test performance  ==========
+    // DateTime before1 = DateTime.now();
+    // print('init : start');
+    // for (var i = 0; i < 10; i++) {
+    //   _ocrText =
+    //       await FlutterTesseractOcr.extractText(url, language: langs, args: {
+    //     "preserve_interword_spaces": "1",
+    //   });
+    // }
+    // DateTime after1 = DateTime.now();
+    // print('init : ${after1.difference(before1).inMilliseconds}');
+    //  ========== Test performance  ==========
+
+    // _ocrHocr =
+    //     await FlutterTesseractOcr.extractHocr(url, language: langs, args: {
+    //   "preserve_interword_spaces": "1",
+    // });
+    // print(_ocrText);
+    // print(_ocrText);
+
+    // === web console test code ===
+    // var worker = Tesseract.createWorker();
+    // await worker.load();
+    // await worker.loadLanguage("eng");
+    // await worker.initialize("eng");
+    // // await worker.setParameters({ "tessjs_create_hocr": "1"});
+    // var rtn = worker.recognize("https://tesseract.projectnaptha.com/img/eng_bw.png");
+    // console.log(rtn.data);
+    // await worker.terminate();
+    // === web console test code ===
+
+    bload = false;
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
+      body: Stack(
+        children: [
+          Padding(
+            padding: EdgeInsets.all(10),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      child: ElevatedButton(
+                          onPressed: () {
+                            showDialog(
+                                context: context,
+                                builder: (BuildContext context) {
+                                  return SimpleDialog(
+                                    title: const Text('Select Url'),
+                                    children: tessimgs
+                                        .map((key, value) {
+                                          return MapEntry(
+                                              key,
+                                              SimpleDialogOption(
+                                                  onPressed: () {
+                                                    urlEditController.text =
+                                                        value;
+                                                    setState(() {});
+                                                    Navigator.pop(context);
+                                                  },
+                                                  child: Row(
+                                                    children: [
+                                                      Text(key),
+                                                      Text(" : "),
+                                                      Flexible(
+                                                          child: Text(value)),
+                                                    ],
+                                                  )));
+                                        })
+                                        .values
+                                        .toList(),
+                                  );
+                                });
+                          },
+                          child: Text("urls")),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(),
+                          labelText: 'input image url',
+                        ),
+                        controller: urlEditController,
+                      ),
+                    ),
+                    ElevatedButton(
+                        onPressed: () {
+                          _ocr(urlEditController.text);
+                        },
+                        child: Text("Run")),
+                  ],
+                ),
+                Row(
+                  children: [
+                    ...LangList.map((e) {
+                      return Row(children: [
+                        Checkbox(
+                            value: selectList.indexOf(e) >= 0,
+                            onChanged: (v) async {
+                              // dynamic add Tessdata
+                              if (kIsWeb == false) {
+                                Directory dir = Directory(
+                                    await FlutterTesseractOcr
+                                        .getTessdataPath());
+                                if (!dir.existsSync()) {
+                                  dir.create();
+                                }
+                                bool isInstalled = false;
+                                dir.listSync().forEach((element) {
+                                  String name = element.path.split('/').last;
+                                  // if (name == 'deu.traineddata') {
+                                  //   element.delete();
+                                  // }
+                                  isInstalled |= name == '$e.traineddata';
+                                });
+                                if (!isInstalled) {
+                                  bDownloadtessFile = true;
+                                  setState(() {});
+                                  HttpClient httpClient = new HttpClient();
+                                  HttpClientRequest request =
+                                      await httpClient.getUrl(Uri.parse(
+                                          'https://github.com/tesseract-ocr/tessdata/raw/main/${e}.traineddata'));
+                                  HttpClientResponse response =
+                                      await request.close();
+                                  Uint8List bytes =
+                                      await consolidateHttpClientResponseBytes(
+                                          response);
+                                  String dir = await FlutterTesseractOcr
+                                      .getTessdataPath();
+                                  print('$dir/${e}.traineddata');
+                                  File file = new File('$dir/${e}.traineddata');
+                                  await file.writeAsBytes(bytes);
+                                  bDownloadtessFile = false;
+                                  setState(() {});
+                                }
+                                print(isInstalled);
+                              }
+                              if (selectList.indexOf(e) < 0) {
+                                selectList.add(e);
+                              } else {
+                                selectList.remove(e);
+                              }
+                              setState(() {});
+                            }),
+                        Text(e)
+                      ]);
+                    }).toList(),
+                  ],
+                ),
+                Expanded(
+                    child: ListView(
+                  children: [
+                    path.length <= 0
+                        ? Container()
+                        : path.indexOf("http") >= 0
+                            ? Image.network(path)
+                            : Image.file(File(path)),
+                    bload
+                        ? Column(children: [CircularProgressIndicator()])
+                        : Text(
+                            '$_ocrText',
+                          ),
+                  ],
+                ))
+              ],
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
+          ),
+          Container(
+            color: Colors.black26,
+            child: bDownloadtessFile
+                ? Center(
+                    child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(),
+                      Text('download Trained language files')
+                    ],
+                  ))
+                : SizedBox(),
+          )
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+
+      floatingActionButton: kIsWeb
+          ? Container()
+          : FloatingActionButton(
+              onPressed: () {
+                runFilePiker();
+                // _ocr("");
+              },
+              tooltip: 'OCR',
+              child: Icon(Icons.add),
+            ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
